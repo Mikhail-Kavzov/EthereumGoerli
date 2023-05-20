@@ -9,19 +9,19 @@ using System.Threading.Tasks;
 namespace EthereumGoerli.Models
 {
 
-    public class EthereumRequest
+    public class EthereumRequest<T>
     {
         [JsonPropertyName("id")]
         public int Id { get; }
         [JsonPropertyName("method")]
         public string Method { get; }
         [JsonPropertyName("params")]
-        public Dictionary<string,string>[] Params { get; }
+        public T[] Params { get; }
         [JsonPropertyName("jsonrpc")]
         public string JsonRPC { get; }
 
         public EthereumRequest(int id, string jsonRPC, string method,
-            Dictionary<string, string>[] methodParams)
+            T[] methodParams)
         {
             Id = id;
             Method = method;
@@ -29,7 +29,7 @@ namespace EthereumGoerli.Models
             JsonRPC = jsonRPC;
         }
 
-        public EthereumRequest(string method, Dictionary<string, string>[] methodParams)
+        public EthereumRequest(string method, T[] methodParams)
             : this(1, "2.0", method, methodParams)
         { }
     }

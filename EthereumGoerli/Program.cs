@@ -48,14 +48,12 @@ internal class Program
             { "address", Configuration.GetConnectionString("WalletPublicKey") }
         };
 
-        EthereumRequestPolling = new EthereumRequest("eth_getLogs", ethParams);
+        EthereumRequestPolling = new EthereumRequest("eth_getLogs",
+            new Dictionary<string, string>[] {ethParams});
     }
 
     private static async void EthereumTransactionRequest(object? state)
     {
-        var jsonstr = JsonSerializer.Serialize(EthereumRequestPolling, 
-            new JsonSerializerOptions() { WriteIndented = true }); ;
-        Console.WriteLine(jsonstr);
         var response = await InfuraServer.PostAsJsonAsync(string.Empty, EthereumRequestPolling);
         if (response.IsSuccessStatusCode)
         {
@@ -70,7 +68,7 @@ internal class Program
 
     private static void Main(string[] args)
     {
-        using (var timer = new Timer(EthereumTransactionRequest, null, 0, 1000))
+        using (var timer = new Timer(EthereumTransactionRequest, null, 0, 10000))
         {
             Console.ReadLine();
         }
