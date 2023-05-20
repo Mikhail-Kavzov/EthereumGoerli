@@ -22,7 +22,7 @@ internal class Program
     static Program()
     {
         var exeDir = Directory.GetCurrentDirectory();
-        var directory = Directory.GetParent(exeDir).Parent?.Parent?.FullName;
+        var directory = Directory.GetParent(exeDir)!.Parent?.Parent?.FullName;
         var builder = new ConfigurationBuilder()
          .SetBasePath(directory)
          .AddJsonFile("config.json", optional: false, reloadOnChange: true);
@@ -128,7 +128,6 @@ internal class Program
                     "Press any key to change receiver wallet");
                 var lastBlockNumber = await GetLastBlockNumberAsync();
                 _previousLastBlockNumber = lastBlockNumber;
-                _currentLastBlockNumber = lastBlockNumber;
                 using (var timer = new Timer(EthereumPollingRequestAsync, receiver, 0, 10000))
                 {
                     Console.ReadLine();
