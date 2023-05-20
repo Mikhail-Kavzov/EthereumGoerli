@@ -7,16 +7,31 @@ using System.Net.Http.Json;
 using System.Buffers.Text;
 using System.Text;
 using System.Text.Json;
+using Nethereum.Web3;
+using Nethereum.RPC.Eth.Filters;
+using Nethereum.RPC.Eth.DTOs;
+using Nethereum.BlockchainProcessing.Processor;
+using System.Numerics;
+using Nethereum.JsonRpc.Client;
+using Newtonsoft.Json.Linq;
+using Nethereum.Contracts.QueryHandlers.MultiCall;
+using System.Text.RegularExpressions;
 
 internal class Program
 {
     public static IConfiguration Configuration { get; private set; }
 
     public static HttpClient InfuraServer { get; private set; }
-    
-    public static EthereumRequest EthereumRequestPolling { get; private set; }
 
-    static  Program()
+    public static EthereumRequest<object>
+        EthereumRequestLastBlockNumber
+    { get; private set; }
+
+    private static string _previousLastBlockNumber = string.Empty;
+    private static string _currentLastBlockNumber = string.Empty;
+
+
+    static Program()
     {
         var exeDir = Directory.GetCurrentDirectory();
         var directory = Directory.GetParent(exeDir).Parent?.Parent?.FullName;
@@ -43,34 +58,98 @@ internal class Program
         InfuraServer.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Basic", authParams);
 
-        var ethParams = new Dictionary<string, string>
-        {
-            { "address", Configuration.GetConnectionString("WalletPublicKey") }
-        };
-
-        EthereumRequestPolling = new EthereumRequest("eth_getLogs",
-            new Dictionary<string, string>[] {ethParams});
+        EthereumRequestLastBlockNumber = new EthereumRequest<object>
+            ("eth_blockNumber",
+            new object[] { });
     }
 
-    private static async void EthereumTransactionRequest(object? state)
+    private static async void EthereumPollingRequestAsync(object value)
     {
-        var response = await InfuraServer.PostAsJsonAsync(string.Empty, EthereumRequestPolling);
-        if (response.IsSuccessStatusCode)
+        var receiver = (string)value;
+        var lastBlock = await GetLastBlockNumberAsync();
+        _currentLastBlockNumber = lastBlock;
+        var currentBlock = lastBlock;
+        var blockNumberInt = Convert.ToInt32(currentBlock, 16);
+        List<Task<string>> blockTasks = new();
+
+        while (currentBlock != _previousLastBlockNumber)
         {
-            var result = await response.Content.ReadAsStringAsync();
-            Console.WriteLine(result);
+            var blockRequest = new EthereumRequest<object>
+            ("eth_getBlockByNumber",
+            new object[] { currentBlock, true });
+            blockTasks.Add(EthereumPostRequestAsync(blockRequest));
+            --blockNumberInt;
+            currentBlock = "0x" + Convert.ToString(blockNumberInt, 16);
         }
-        else
+        _previousLastBlockNumber = lastBlock;
+        var blocks = await Task.WhenAll(blockTasks);
+        DisplayTransactions(blocks, receiver);
+    }
+
+    private static void DisplayTransactions(string[] blocks, string receiver)
+    {
+        foreach (var block in blocks)
         {
-            Console.WriteLine($"status: {response.StatusCode}");
+            var ethereumBlock = JsonSerializer.Deserialize<EthereumResponse<EthereumBlock>>(block);
+            var transactions = ethereumBlock!.Result.TransactionList;
+            var walletTransactions = transactions
+            .Where(t => t.Receiver != null && t.Receiver == receiver);
+
+            foreach (var transaction in walletTransactions)
+            {
+                Console.WriteLine(transaction);
+            }
         }
     }
 
-    private static void Main(string[] args)
+    private static async Task<string> EthereumPostRequestAsync<T>(T value)
     {
-        using (var timer = new Timer(EthereumTransactionRequest, null, 0, 10000))
+        var response = await InfuraServer.PostAsJsonAsync(string.Empty, value);
+        if (!response.IsSuccessStatusCode)
         {
-            Console.ReadLine();
+            throw new Exception($"Response failed. Status {response.StatusCode}");
+        }
+        var result = await response.Content.ReadAsStringAsync();
+        return result;
+    }
+
+    private static async Task<string> GetLastBlockNumberAsync()
+    {
+        var response = await EthereumPostRequestAsync(EthereumRequestLastBlockNumber);
+        var lastBlockNumber = JsonSerializer.Deserialize<EthereumResponse<string>>(response)!.Result;
+        return lastBlockNumber;
+    }
+
+    private static async Task Main(string[] args)
+    {
+        while (true)
+        {
+            Console.WriteLine("Enter receiver wallet: ");
+            var receiver = Console.ReadLine();
+            if (Regex.IsMatch(receiver, @"^0x[a-fA-F0-9]{40}$"))
+            {
+                receiver = receiver.ToLower();
+                Console.WriteLine("Start listening transactions... " +
+                    "Press any key to change receiver wallet");
+                var lastBlockNumber = await GetLastBlockNumberAsync();
+                _previousLastBlockNumber = lastBlockNumber;
+                _currentLastBlockNumber = lastBlockNumber;
+                using (var timer = new Timer(EthereumPollingRequestAsync, receiver, 0, 10000))
+                {
+                    Console.ReadLine();
+                }
+            }
+            else
+            {
+                Console.WriteLine("Incorrect wallet");
+            }
+            Console.WriteLine("Would you like to exit from program? 1 - Yes, 2 - No");
+            var key = Console.ReadKey();
+            if (key.KeyChar == '1')
+            {
+                break;
+            }
+            Console.WriteLine();
         }
     }
 }
