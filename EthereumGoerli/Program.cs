@@ -1,20 +1,9 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Hosting;
-using System.Runtime.CompilerServices;
 using System.Net.Http.Headers;
 using EthereumGoerli.Models;
 using System.Net.Http.Json;
-using System.Buffers.Text;
 using System.Text;
 using System.Text.Json;
-using Nethereum.Web3;
-using Nethereum.RPC.Eth.Filters;
-using Nethereum.RPC.Eth.DTOs;
-using Nethereum.BlockchainProcessing.Processor;
-using System.Numerics;
-using Nethereum.JsonRpc.Client;
-using Newtonsoft.Json.Linq;
-using Nethereum.Contracts.QueryHandlers.MultiCall;
 using System.Text.RegularExpressions;
 
 internal class Program
@@ -28,7 +17,6 @@ internal class Program
     { get; private set; }
 
     private static string _previousLastBlockNumber = string.Empty;
-    private static string _currentLastBlockNumber = string.Empty;
 
 
     static Program()
@@ -67,7 +55,6 @@ internal class Program
     {
         var receiver = (string)value;
         var lastBlock = await GetLastBlockNumberAsync();
-        _currentLastBlockNumber = lastBlock;
         var currentBlock = lastBlock;
         var blockNumberInt = Convert.ToInt32(currentBlock, 16);
         List<Task<string>> blockTasks = new();
@@ -82,8 +69,16 @@ internal class Program
             currentBlock = "0x" + Convert.ToString(blockNumberInt, 16);
         }
         _previousLastBlockNumber = lastBlock;
-        var blocks = await Task.WhenAll(blockTasks);
-        DisplayTransactions(blocks, receiver);
+        try
+        {
+            var blocks = await Task.WhenAll(blockTasks);
+            DisplayTransactions(blocks, receiver);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+        
     }
 
     private static void DisplayTransactions(string[] blocks, string receiver)
